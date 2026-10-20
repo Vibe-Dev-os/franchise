@@ -6,7 +6,7 @@ export type { VehicleType } from "@/lib/constants";
 
 const VehicleSchema = new Schema(
   {
-    plateOrBodyNumber: { type: String, required: true, trim: true, uppercase: true },
+    plateOrBodyNumber: { type: String, required: true, trim: true, uppercase: true, unique: true },
     vehicleType: { type: String, enum: VEHICLE_TYPES, required: true },
     engineNumber: { type: String, required: true, trim: true },
     chassisNumber: { type: String, required: true, trim: true },

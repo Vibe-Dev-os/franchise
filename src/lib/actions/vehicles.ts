@@ -29,6 +29,18 @@ export async function createVehicle(input: unknown): Promise<ActionResult<{ id: 
     await requireRole("admin", "franchising_officer");
     const parsed = vehicleSchema.parse(input);
     await connectDB();
+
+    const existing = await Vehicle.findOne({
+      plateOrBodyNumber: parsed.plateOrBodyNumber.toUpperCase(),
+      archived: { $ne: true },
+    }).lean();
+    if (existing) {
+      return {
+        success: false,
+        error: `Plate/body number "${parsed.plateOrBodyNumber.toUpperCase()}" is already registered to another vehicle.`,
+      };
+    }
+
     const vehicle = await Vehicle.create(parsed);
     revalidatePath("/vehicles");
     return { success: true, data: { id: vehicle._id.toString() } };
@@ -42,6 +54,19 @@ export async function updateVehicle(id: string, input: unknown): Promise<ActionR
     await requireRole("admin", "franchising_officer");
     const parsed = vehicleSchema.parse(input);
     await connectDB();
+
+    const existing = await Vehicle.findOne({
+      plateOrBodyNumber: parsed.plateOrBodyNumber.toUpperCase(),
+      archived: { $ne: true },
+      _id: { $ne: id },
+    }).lean();
+    if (existing) {
+      return {
+        success: false,
+        error: `Plate/body number "${parsed.plateOrBodyNumber.toUpperCase()}" is already used by another vehicle.`,
+      };
+    }
+
     await Vehicle.findByIdAndUpdate(id, parsed);
     revalidatePath("/vehicles");
     revalidatePath(`/vehicles/${id}`);
