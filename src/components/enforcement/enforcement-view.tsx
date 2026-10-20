@@ -10,10 +10,11 @@ import {
   AlertTriangle,
   Clock,
   Loader2,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { quickLookup, listRecentInspections } from "@/lib/actions/violations";
-import type { LookupResult } from "@/lib/actions/violations";
+import type { LookupResult, PastViolation } from "@/lib/actions/violations";
 import { LogViolationDialog } from "@/components/enforcement/log-violation-dialog";
 import { PrintSlipDialog, type ViolationSlipData } from "@/components/enforcement/print-slip-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -53,6 +54,13 @@ const RESULT_META: Record<
     icon: AlertTriangle,
     className: "border-status-expired/40 bg-status-expired/15 text-status-expired",
   },
+};
+
+const VIOLATION_STATUS_STYLES: Record<string, string> = {
+  recorded: "border-status-expiring/30 bg-status-expiring/10 text-status-expiring",
+  paid: "border-status-active/30 bg-status-active/10 text-status-active",
+  contested: "border-status-suspended/30 bg-status-suspended/10 text-status-suspended",
+  waived: "border-border bg-muted text-muted-foreground",
 };
 
 export function EnforcementView({
@@ -200,48 +208,92 @@ function ResultCard({
   const Icon = meta.icon;
   const franchise = result.franchise;
   const isUnregistered = result.result === "not_found_unregistered";
+  const pastViolations: PastViolation[] = result.pastViolations ?? [];
 
   return (
-    <div className={`animate-in rounded-xl border p-5 ${meta.className}`}>
-      <div className="flex items-start gap-3">
-        <Icon className="size-8 shrink-0" />
-        <div className="flex-1 space-y-2">
-          <p className="text-lg font-semibold">{meta.label}</p>
-          {isUnregistered ? (
-            <p className="text-sm font-medium">
-              No franchise record found for &quot;{result.query}&quot; — this vehicle is
-              UNREGISTERED.
-            </p>
-          ) : franchise ? (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-              <p>
-                <span className="opacity-70">Franchise:</span> {franchise.franchiseNumber}
+    <div className="space-y-3">
+      <div className={`animate-in rounded-xl border p-5 ${meta.className}`}>
+        <div className="flex items-start gap-3">
+          <Icon className="size-8 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <p className="text-lg font-semibold">{meta.label}</p>
+            {isUnregistered ? (
+              <p className="text-sm font-medium">
+                No franchise record found for &quot;{result.query}&quot; — this vehicle is
+                UNREGISTERED.
               </p>
-              <p>
-                <span className="opacity-70">Driver:</span>{" "}
-                {(franchise.driverId as { fullName?: string } | null)?.fullName ?? "—"}
-              </p>
-              <p>
-                <span className="opacity-70">Vehicle:</span>{" "}
-                {(franchise.vehicleId as { plateOrBodyNumber?: string } | null)?.plateOrBodyNumber ??
-                  "—"}
-              </p>
-              <p>
-                <span className="opacity-70">Route/Zone:</span> {franchise.routeOrZone as string}
-              </p>
-              <p>
-                <span className="opacity-70">Expiry:</span>{" "}
-                {format(new Date(franchise.expiryDate), "MMM d, yyyy")}
-              </p>
-            </div>
-          ) : null}
-          {result.result !== "valid_franchise" ? (
-            <Button size="sm" variant="outline" className="mt-2 bg-background" onClick={onLogViolation}>
-              Log Violation
-            </Button>
-          ) : null}
+            ) : franchise ? (
+              <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                <p>
+                  <span className="opacity-70">Franchise:</span> {franchise.franchiseNumber}
+                </p>
+                <p>
+                  <span className="opacity-70">Driver:</span>{" "}
+                  {(franchise.driverId as { fullName?: string } | null)?.fullName ?? "—"}
+                </p>
+                <p>
+                  <span className="opacity-70">Vehicle:</span>{" "}
+                  {(franchise.vehicleId as { plateOrBodyNumber?: string } | null)?.plateOrBodyNumber ??
+                    "—"}
+                </p>
+                <p>
+                  <span className="opacity-70">Route/Zone:</span> {franchise.routeOrZone as string}
+                </p>
+                <p>
+                  <span className="opacity-70">Expiry:</span>{" "}
+                  {format(new Date(franchise.expiryDate), "MMM d, yyyy")}
+                </p>
+              </div>
+            ) : null}
+            {result.result !== "valid_franchise" ? (
+              <Button size="sm" variant="outline" className="mt-2 bg-background" onClick={onLogViolation}>
+                Log Violation
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
+
+      {/* Past violations for this plate */}
+      {pastViolations.length > 0 ? (
+        <div className="rounded-xl border border-border">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <ScrollText className="size-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">
+              Past Violations ({pastViolations.length})
+            </span>
+          </div>
+          <ul className="divide-y divide-border">
+            {pastViolations.map((v) => (
+              <li key={v._id} className="grid grid-cols-1 gap-1 px-4 py-3 text-sm sm:grid-cols-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="capitalize">
+                    {v.violationType.replace(/_/g, " ")}
+                  </Badge>
+                  <Badge variant="outline" className={VIOLATION_STATUS_STYLES[v.status] ?? ""}>
+                    {v.status}
+                  </Badge>
+                </div>
+                <div className="text-right text-muted-foreground">
+                  ₱{Number(v.fineAmount).toLocaleString()} &mdash;{" "}
+                  {format(new Date(v.dateRecorded), "MMM d, yyyy")}
+                </div>
+                <div className="text-muted-foreground">{v.location}</div>
+                <div className="text-right text-muted-foreground">
+                  {v.officerId?.name ?? "—"}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        result.result !== "valid_franchise" && (
+          <div className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground">
+            <ScrollText className="size-4" />
+            No previous violations on record for this plate.
+          </div>
+        )
+      )}
     </div>
   );
 }

@@ -15,15 +15,27 @@ import { type ActionResult, errorMessage, serialize } from "@/lib/actions/utils"
 import type { InspectionResult } from "@/lib/models/InspectionLog";
 import type { SerializedFranchise } from "@/lib/actions/franchises";
 
+export type PastViolation = {
+  _id: string;
+  violationType: string;
+  status: string;
+  fineAmount: number;
+  location: string;
+  dateRecorded: string;
+  officerId?: { name: string } | null;
+};
+
 export type LookupResult = {
   result: InspectionResult;
   franchise: SerializedFranchise | null;
   query: string;
+  pastViolations: PastViolation[];
 };
 
 /**
  * Looks up a plate/franchise number, always logging the attempt to
  * InspectionLog for a full audit trail, regardless of outcome.
+ * Also fetches past violations for that plate/body number.
  */
 export async function quickLookup(input: unknown): Promise<ActionResult<LookupResult>> {
   try {
@@ -52,8 +64,19 @@ export async function quickLookup(input: unknown): Promise<ActionResult<LookupRe
       linkedFranchiseId: franchise?._id ?? null,
     });
 
+    // Fetch past violations for this plate/body number (case-insensitive)
+    const rawViolations = await Violation.find({
+      plateOrBodyNumberChecked: new RegExp(`^${query.trim()}$`, "i"),
+    })
+      .populate("officerId", "name")
+      .sort({ dateRecorded: -1 })
+      .limit(10)
+      .lean();
+
+    const pastViolations = serialize(rawViolations) as PastViolation[];
+
     revalidatePath("/enforcement");
-    return { success: true, data: { result, franchise, query } };
+    return { success: true, data: { result, franchise, query, pastViolations } };
   } catch (err) {
     return { success: false, error: errorMessage(err) };
   }
